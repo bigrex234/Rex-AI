@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#09090f"><title>Log in | Rex Ai</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;background:radial-gradient(ellipse at 20% 10%,#28134c 0,transparent 42%),#09090f;color:#f5f3ff;font-family:Inter,Arial,sans-serif}.card{width:min(100%,430px);padding:38px;border:1px solid #ffffff1c;border-radius:24px;background:#171421d9;box-shadow:0 25px 90px #0008;backdrop-filter:blur(18px)}.brand{text-align:center;font-size:26px;font-weight:800;margin-bottom:8px}.brand span{color:#a78bfa}.sub{text-align:center;color:#aaa4b8;font-size:14px;margin:0 0 28px}.orb{width:58px;height:58px;border-radius:18px;display:grid;place-items:center;margin:0 auto 18px;background:linear-gradient(135deg,#8b5cf6,#4c1d95);font-size:27px;font-weight:800;box-shadow:0 0 35px #8b5cf655}label{display:block;margin:17px 0 8px;font-size:13px;color:#ddd6fe}input{width:100%;padding:14px 15px;border-radius:12px;border:1px solid #ffffff20;background:#0e0c16;color:white;outline:none;font:inherit}input:focus{border-color:#9b7af5;box-shadow:0 0 0 3px #8b5cf622}.submit{width:100%;margin-top:24px;padding:14px;border:0;border-radius:12px;background:linear-gradient(100deg,#7c3aed,#a855f7);color:white;font-weight:700;font-size:15px;cursor:pointer}.switch{text-align:center;color:#aaa4b8;font-size:13px;margin:22px 0 0}.switch a,.back{color:#c4b5fd;text-decoration:none}.flash{padding:11px 13px;border-radius:10px;margin:10px 0;background:#7f1d1d55;border:1px solid #ef444455;color:#fecaca;font-size:13px}.back{display:block;text-align:center;margin-top:20px;font-size:13px}
+  </style>
+</head>
+<body><main class="card"><div class="orb">R</div><div class="brand">Rex <span>Ai</span></div><p class="sub">Welcome back. Log in to continue your conversations.</p>
+  {% with messages = get_flashed_messages(with_categories=true) %}{% for category, message in messages %}<div class="flash">{{ message }}</div>{% endfor %}{% endwith %}
+  <form method="POST" action="{{ url_for('login') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label for="email">Email address</label><input id="email" name="email" type="email" autocomplete="email" placeholder="you@example.com" maxlength="254" required>
+    <label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" placeholder="Your password" required>
+    <button class="submit" type="submit">Log in</button>
+  </form><p class="switch">New to Rex Ai? <a href="{{ url_for('register') }}">Create an account</a></p><a class="back" href="{{ url_for('home') }}">← Back to Rex Ai</a>
+</main></body></html>

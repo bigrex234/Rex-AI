@@ -1,0 +1,310 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#09090f">
+
+    <title>Rex Ai - Your Intelligent Assistant</title>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.3.1/dist/purify.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/github-dark.min.css">
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+
+<body>
+
+<div class="app-container">
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar" id="sidebar">
+
+        <div class="brand">
+            <div class="brand-icon">R</div>
+            <div class="brand-name">Rex <span>Ai</span></div>
+            <button class="close-sidebar" id="closeSidebar" aria-label="Close sidebar">×</button>
+        </div>
+
+        <button class="new-chat-btn" id="newChatBtn">
+            <span>＋</span> New Chat
+            <span class="shortcut">⌘ K</span>
+        </button>
+
+        <div class="sidebar-section">
+            <p class="section-label">WORKSPACE</p>
+
+            <button class="sidebar-link active">
+                <span>◈</span> Chat
+            </button>
+
+            <button class="sidebar-link" id="voiceShortcut">
+                <span>◉</span> Voice Assistant
+                <span class="coming-soon">NEW</span>
+            </button>
+        </div>
+
+        <div class="history-section">
+            <p class="section-label">RECENT CHATS</p>
+            <div id="chatHistory" class="chat-history">
+                <p class="empty-history">Your conversations will appear here.</p>
+            </div>
+        </div>
+
+        <div class="sidebar-bottom">
+            {% if current_user.is_authenticated %}
+            <div class="profile-card">
+                <div class="profile-avatar">{{ current_user.email[0]|upper }}</div>
+                <div class="profile-info">
+                    <strong>{{ current_user.email }}</strong>
+                    <span>Rex Ai account</span>
+                </div>
+                <span class="online-dot"></span>
+            </div>
+            <form method="POST" action="{{ url_for('logout') }}" style="margin-top:10px;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <button type="submit" style="width:100%;padding:10px;border:1px solid rgba(255,255,255,.12);border-radius:10px;background:rgba(255,255,255,.04);color:#c4b5fd;cursor:pointer;">Log out</button>
+            </form>
+            {% else %}
+            <div class="profile-card">
+                <div class="profile-avatar">R</div>
+                <div class="profile-info">
+                    <strong>Guest account</strong>
+                    <span>Save chats with an account</span>
+                </div>
+                <span class="online-dot"></span>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:10px;">
+                <a href="{{ url_for('login') }}" style="flex:1;text-align:center;padding:10px 6px;border:1px solid rgba(255,255,255,.15);border-radius:10px;color:#ddd6fe;text-decoration:none;font-size:12px;">Log in</a>
+                <a href="{{ url_for('register') }}" style="flex:1;text-align:center;padding:10px 6px;border-radius:10px;background:linear-gradient(100deg,#7c3aed,#a855f7);color:white;text-decoration:none;font-size:12px;font-weight:700;">Sign up</a>
+            </div>
+            {% endif %}
+        </div>
+
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <main class="main-content">
+
+        <header class="topbar">
+
+            <div class="topbar-left">
+                <button class="menu-btn" id="menuBtn" aria-label="Open menu">☰</button>
+
+                <div class="mobile-brand">
+                    <span class="brand-icon small">R</span>
+                    Rex <span>Ai</span>
+                </div>
+            </div>
+
+            <div class="model-selector">
+                <span class="status-dot"></span>
+                <span>Rex Ai</span>
+                <span class="model-version">AI Assistant</span>
+                <span class="dropdown-arrow">⌄</span>
+            </div>
+
+            <button class="top-action" id="clearChatBtn" title="Clear conversation">
+                ↺
+            </button>
+
+        </header>
+
+        <!-- CHAT AREA -->
+        <section class="chat-area" id="chatArea">
+
+            <div class="welcome-screen" id="welcomeScreen">
+
+                <div class="hero-orb">
+                    <div class="orb-ring ring-one"></div>
+                    <div class="orb-ring ring-two"></div>
+                    <div class="orb-core">
+                        <span>R</span>
+                    </div>
+                    <div class="orb-particle particle-one"></div>
+                    <div class="orb-particle particle-two"></div>
+                    <div class="orb-particle particle-three"></div>
+                </div>
+
+                <div class="welcome-label">
+                    <span class="status-dot"></span>
+                    YOUR AI ASSISTANT IS ONLINE
+                </div>
+
+                <h1>Meet <span>Rex Ai.</span></h1>
+
+                <p class="welcome-description">
+                    Your ideas deserve intelligence.
+                    Ask questions, explore ideas, create things
+                    and get things done.
+                </p>
+
+                <div class="suggestion-grid">
+
+                    <button class="suggestion-card" data-prompt="Explain artificial intelligence in simple terms.">
+                        <span class="suggestion-icon purple">✦</span>
+                        <span>
+                            <strong>Learn something</strong>
+                            <small>Explain complex topics simply</small>
+                        </span>
+                        <span class="card-arrow">↗</span>
+                    </button>
+
+                    <button class="suggestion-card" data-prompt="Help me build a modern website using Python and Flask.">
+                        <span class="suggestion-icon blue">⌘</span>
+                        <span>
+                            <strong>Write some code</strong>
+                            <small>Build, debug and understand code</small>
+                        </span>
+                        <span class="card-arrow">↗</span>
+                    </button>
+
+                    <button class="suggestion-card" data-prompt="Give me five creative business ideas I can start.">
+                        <span class="suggestion-icon orange">✧</span>
+                        <span>
+                            <strong>Get creative</strong>
+                            <small>Discover new ideas and possibilities</small>
+                        </span>
+                        <span class="card-arrow">↗</span>
+                    </button>
+
+                    <button class="suggestion-card" data-prompt="Help me create a practical study plan for this week.">
+                        <span class="suggestion-icon green">◷</span>
+                        <span>
+                            <strong>Plan something</strong>
+                            <small>Organize your goals and tasks</small>
+                        </span>
+                        <span class="card-arrow">↗</span>
+                    </button>
+
+                </div>
+
+            </div>
+
+            <!-- MESSAGES -->
+            <div class="messages-container" id="messagesContainer"></div>
+
+        </section>
+
+        <!-- INPUT AREA -->
+        <footer class="composer-section">
+
+            <div class="composer-wrapper">
+
+                <div class="composer-box">
+
+                    <textarea
+                        id="messageInput"
+                        placeholder="Message Rex Ai..."
+                        rows="1"
+                        maxlength="10000"
+                    ></textarea>
+
+                    <div class="composer-toolbar">
+
+                        <div class="composer-tools">
+                            <button class="tool-btn" title="Attachments coming soon" disabled>
+                                ＋
+                            </button>
+
+                            <span class="tool-divider"></span>
+
+                            <span class="input-hint">Ask Rex anything</span>
+                        </div>
+
+                        <div class="composer-actions">
+
+                            <button class="voice-btn" id="voiceBtn" title="Preview Rex Ai female voice" aria-label="Preview Rex Ai female voice">
+                                <span>🔊</span>
+                            </button>
+
+                            <button class="send-btn" id="sendBtn" title="Send message" aria-label="Send message">
+                                ↑
+                            </button>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+                <p class="disclaimer">
+                    Rex Ai can make mistakes. Verify important information.
+                </p>
+
+            </div>
+
+        </footer>
+
+    </main>
+
+</div>
+
+
+<!-- FULL-SCREEN REX AI VOICE ASSISTANT -->
+<section class="jarvis-screen" id="jarvisScreen" aria-hidden="true">
+    <div class="jarvis-grid"></div>
+    <header class="jarvis-topbar">
+        <button class="jarvis-back" id="jarvisBack" type="button" aria-label="Return to chat">← <span>BACK TO CHAT</span></button>
+        <div class="jarvis-brand"><span class="jarvis-brand-mark">R</span><span>REX <b>AI</b></span></div>
+        <div class="jarvis-online"><i></i> SYSTEM ONLINE</div>
+    </header>
+
+    <main class="jarvis-main">
+        <div class="jarvis-eyebrow"><span></span> PERSONAL AI INTERFACE</div>
+        <h1>At your service<span>.</span></h1>
+        <p class="jarvis-subtitle">Your intelligent assistant is ready when you are.</p>
+
+        <div class="jarvis-orb-stage" aria-label="Rex Ai visualizer, currently idle">
+            <div class="jarvis-orbit orbit-a"></div>
+            <div class="jarvis-orbit orbit-b"></div>
+            <div class="jarvis-orbit orbit-c"></div>
+            <div class="jarvis-orb-halo"></div>
+            <div class="jarvis-orb">
+                <div class="jarvis-orb-shine"></div>
+                <div class="jarvis-orb-core">R</div>
+            </div>
+            <div class="jarvis-spark spark-a"></div>
+            <div class="jarvis-spark spark-b"></div>
+            <div class="jarvis-spark spark-c"></div>
+        </div>
+
+        <div class="jarvis-status" id="jarvisStatus">STANDING BY</div>
+        <p class="jarvis-prompt" id="jarvisPrompt">Tap the microphone and speak naturally. I am ready to listen.</p>
+
+        <div class="jarvis-controls">
+            <button class="jarvis-mic" id="jarvisMic" type="button" aria-label="Start voice conversation">
+                <span>🎙</span>
+            </button>
+            <span class="jarvis-control-caption" id="jarvisControlCaption">TAP THE MICROPHONE TO START · OR TYPE BELOW</span>
+            <button class="jarvis-stop" id="jarvisStop" type="button" disabled>END VOICE SESSION</button>
+        </div>
+
+        <div class="jarvis-transcript" id="jarvisTranscript">
+            <div class="jarvis-transcript-label">CONVERSATION</div>
+            <div class="jarvis-transcript-empty">Your conversation will appear here.</div>
+        </div>
+
+        <form class="jarvis-composer" id="jarvisComposer">
+            <textarea id="jarvisTextInput" rows="1" maxlength="4000" placeholder="Message Rex Ai… You can type or speak at any time." aria-label="Message Rex Ai"></textarea>
+            <button id="jarvisSend" type="submit" aria-label="Send message" title="Send message">↑</button>
+        </form>
+        <p class="jarvis-composer-hint">TYPE A MESSAGE OR USE THE MICROPHONE · ONE CONTINUOUS CONVERSATION</p>
+    </main>
+
+    <footer class="jarvis-footer">
+        <span>REX AI <b>VOICE SYSTEM</b></span>
+        <span>POWERED BY GROQ</span>
+        <span>FEMALE VOICE · HANNAH</span>
+    </footer>
+</section>
+
+<script src="{{ url_for('static', filename='js/main.js') }}" defer></script>
+
+</body>
+</html>
