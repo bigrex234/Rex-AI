@@ -501,7 +501,11 @@ def voice_transcribe():
 # ---------------- REX AI ACTION EXECUTION ----------------
 # Generated files are stored outside static/ and served only through a safe
 # download endpoint. No database schema changes are required.
-GENERATED_DIR = os.path.join(app.instance_path, "generated")
+GENERATED_DIR = (
+    os.path.join("/tmp", "rex-ai-generated")
+    if os.getenv("VERCEL")
+    else os.path.join(app.instance_path, "generated")
+)
 os.makedirs(GENERATED_DIR, exist_ok=True)
 ALLOWED_EXPORTS = {"pdf", "docx", "xlsx", "pptx"}
 
