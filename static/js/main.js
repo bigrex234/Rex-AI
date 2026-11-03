@@ -19,6 +19,7 @@ const sidebar = $("sidebar");
 const menuBtn = $("menuBtn");
 const closeSidebar = $("closeSidebar");
 const historyEl = $("chatHistory");
+const inputHint = document.querySelector(".input-hint");
 
 if (!messageInput || !sendBtn || !messagesContainer || !welcomeScreen || !chatArea) {
     console.error("Rex Ai: required elements are missing from the page.");
@@ -30,14 +31,16 @@ if (!messageInput || !sendBtn || !messagesContainer || !welcomeScreen || !chatAr
 // ==========================================
 
 const STORAGE_KEY = "rexai.chats.v1";
+const THEME_KEY = "rexai.theme";
 const MAX_CHATS = 30;
-const MAX_HISTORY_SENT = 20;       // messages sent to the server for context
+const MAX_HISTORY_SENT = 20;
 const MAX_INPUT_LENGTH = 4000;
 const REQUEST_TIMEOUT_MS = 60000;
 
 const sendIdleHTML = sendBtn.innerHTML;
+const hintDefault = inputHint ? inputHint.textContent : "";
 
-let chats = loadChats();           // [{ id, title, updated, messages: [{role, content}] }]
+let chats = loadChats();
 let activeChatId = null;
 let isLoading = false;
 let csrfToken = null;
@@ -46,6 +49,46 @@ let stickToBottom = true;
 
 messageInput.maxLength = MAX_INPUT_LENGTH;
 sendBtn.setAttribute("aria-label", "Send message");
+
+// ==========================================
+// THEME (dark / light toggle, injected into the top bar)
+// ==========================================
+
+function getSavedTheme() {
+    try { return localStorage.getItem(THEME_KEY) === "light" ? "light" : "dark"; }
+    catch { return "dark"; }
+}
+
+function applyTheme(theme) {
+    document.documentElement.dataset.theme = theme;
+    document.querySelector('meta[name="theme-color"]')
+        ?.setAttribute("content", theme === "light" ? "#f3f6fb" : "#060a12");
+    if (themeBtn) {
+        themeBtn.textContent = theme === "light" ? "☾" : "☀";
+        themeBtn.title = theme === "light" ? "Switch to dark theme" : "Switch to light theme";
+        themeBtn.setAttribute("aria-label", themeBtn.title);
+    }
+}
+
+const themeBtn = document.createElement("button");
+themeBtn.type = "button";
+themeBtn.className = "top-action theme-toggle";
+
+const topbar = document.querySelector(".topbar");
+if (topbar && clearChatBtn) {
+    const right = document.createElement("div");
+    right.className = "topbar-right";
+    topbar.insertBefore(right, clearChatBtn);
+    right.append(themeBtn, clearChatBtn);
+}
+
+themeBtn.addEventListener("click", () => {
+    const next = document.documentElement.dataset.theme === "light" ? "dark" : "light";
+    applyTheme(next);
+    try { localStorage.setItem(THEME_KEY, next); } catch {}
+});
+
+applyTheme(getSavedTheme());
 
 // ==========================================
 // STORAGE
@@ -127,7 +170,6 @@ async function copyText(text) {
         await navigator.clipboard.writeText(text);
         return true;
     } catch {
-        // fallback for older browsers / non-secure contexts
         try {
             const area = document.createElement("textarea");
             area.value = text;
@@ -160,13 +202,22 @@ function renderMarkdown(element, content) {
         const code = pre.querySelector("code");
         if (code && window.hljs) hljs.highlightElement(code);
 
+        // language label (top-left of the code block)
+        const lang = (code?.className.match(/language-([\w+#-]+)/) || [])[1];
+        if (lang) {
+            const label = document.createElement("span");
+            label.className = "code-lang";
+            label.textContent = lang;
+            pre.appendChild(label);
+        }
+
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = "code-copy";
         btn.textContent = "Copy";
         btn.addEventListener("click", async () => {
             const ok = await copyText((code || pre).textContent);
-            btn.textContent = ok ? "Copied" : "Failed";
+            btn.textContent = ok ? "Copied ✓" : "Failed";
             setTimeout(() => (btn.textContent = "Copy"), 1600);
         });
         pre.appendChild(btn);
@@ -233,12 +284,25 @@ closeSidebar?.addEventListener("click", hideSidebar);
 overlay.addEventListener("click", hideSidebar);
 
 // ==========================================
-// INPUT
+// INPUT (auto-resize, ready state, character counter)
 // ==========================================
 
 function autoResize() {
     messageInput.style.height = "auto";
     messageInput.style.height = Math.min(messageInput.scrollHeight, 150) + "px";
+
+    const length = messageInput.value.length;
+    sendBtn.classList.toggle("is-ready", length > 0);
+
+    if (inputHint) {
+        if (length > MAX_INPUT_LENGTH * 0.8) {
+            inputHint.textContent = `${length} / ${MAX_INPUT_LENGTH}`;
+            inputHint.classList.add("warn");
+        } else {
+            inputHint.textContent = hintDefault;
+            inputHint.classList.remove("warn");
+        }
+    }
 }
 
 messageInput.addEventListener("input", autoResize);
@@ -247,7 +311,7 @@ messageInput.addEventListener("input", autoResize);
 // MESSAGES
 // ==========================================
 
-function addMessage(role, content, { animate = true, isError = false } = {}) {
+function addMessage(role, content, { animate = true, isError = false, reveal = false } = {}) {
     const message = document.createElement("div");
     message.className = `message ${role}${isError ? " error" : ""}`;
 
@@ -279,6 +343,11 @@ function addMessage(role, content, { animate = true, isError = false } = {}) {
 
     if (role === "assistant" && !isError) {
         renderMarkdown(text, content);
+        if (reveal) {
+            // each block (paragraph, list, code...) fades in one after another
+            text.classList.add("reveal");
+            [...text.children].forEach((el, i) => el.style.setProperty("--i", Math.min(i, 14)));
+        }
     } else {
         text.textContent = content;
     }
@@ -296,7 +365,7 @@ function addMessage(role, content, { animate = true, isError = false } = {}) {
             const ok = await copyText(content);
             showToast(ok ? "Response copied!" : "Could not copy response.");
             if (ok) {
-                copyBtn.textContent = "Copied";
+                copyBtn.textContent = "Copied ✓";
                 setTimeout(() => (copyBtn.textContent = "Copy"), 1600);
             }
         });
@@ -334,7 +403,7 @@ function refreshRegenerateButton() {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "regen-btn";
-    btn.textContent = "Regenerate";
+    btn.textContent = "↻ Regenerate";
     btn.addEventListener("click", regenerate);
     actions.appendChild(btn);
 }
@@ -371,7 +440,7 @@ function removeTyping(immediate = false) {
         return;
     }
 
-    typing.id = "";   // so a new indicator can't collide with the fading one
+    typing.id = "";
     typing.style.transition = "opacity 0.25s ease, transform 0.25s ease";
     typing.style.opacity = "0";
     typing.style.transform = "translateY(8px)";
@@ -393,7 +462,6 @@ function showWelcomeView() {
     scrollDownBtn.classList.remove("show");
 
     welcomeScreen.style.display = "flex";
-    // replay the entrance animation
     welcomeScreen.style.animation = "none";
     void welcomeScreen.offsetWidth;
     welcomeScreen.style.animation = "";
@@ -603,7 +671,7 @@ async function sendMessage(customMessage = null) {
         const reply = await requestReply(message, history, abortController.signal);
         removeTyping();
 
-        addMessage("assistant", reply);
+        addMessage("assistant", reply, { reveal: true });
 
         // create the chat only once we have a successful reply
         let chat = getActiveChat();
@@ -620,7 +688,6 @@ async function sendMessage(customMessage = null) {
         );
         chat.updated = Date.now();
 
-        // most recent conversation first
         chats.sort((a, b) => b.updated - a.updated);
 
         saveChats();
@@ -659,7 +726,6 @@ function regenerate() {
     chat.messages.splice(-2);
     saveChats();
 
-    // remove the last assistant + user bubbles from the screen
     [...messagesContainer.querySelectorAll(".message")].slice(-2).forEach(node => node.remove());
 
     sendMessage(lastUser.content);
@@ -694,11 +760,14 @@ document.querySelectorAll(".suggestion-card").forEach(card => {
 newChatBtn?.addEventListener("click", resetChat);
 clearChatBtn?.addEventListener("click", resetChat);
 
+// ==========================================
+// VOICE PREVIEW (speaker button in the composer)
+// ==========================================
+
 let voicePreviewAudio = null;
 let voicePreviewUrl = null;
 
 async function previewRexFemaleVoice() {
-    // Clicking again while the preview is playing stops it.
     if (voicePreviewAudio && !voicePreviewAudio.paused) {
         voicePreviewAudio.pause();
         voicePreviewAudio.currentTime = 0;
@@ -751,8 +820,9 @@ async function previewRexFemaleVoice() {
 }
 
 voiceBtn?.addEventListener("click", previewRexFemaleVoice);
+
 // ==========================================
-// FULL-SCREEN JARVIS INTERFACE (STEP 1)
+// FULL-SCREEN VOICE ASSISTANT
 // ==========================================
 
 const jarvisScreen = $("jarvisScreen");
@@ -780,7 +850,7 @@ function closeJarvisMode() {
 jarvisShortcut?.addEventListener("click", openJarvisMode);
 jarvisBack?.addEventListener("click", closeJarvisMode);
 
-// JARVIS VOICE CONVERSATION: record -> transcribe -> chat -> speak -> listen again.
+// record -> transcribe -> chat -> speak -> listen again
 const jarvisMic = $("jarvisMic");
 const jarvisStop = $("jarvisStop");
 const jarvisStatus = $("jarvisStatus");
@@ -813,8 +883,9 @@ function jarvisState(state, prompt) {
 }
 
 function jarvisTranscriptLine(role, content) {
-    const empty = $("jarvisTranscriptEmpty");
-    empty?.remove();
+    // the empty-state placeholder in index.html is a class, not an id
+    jarvisTranscript?.querySelector(".jarvis-transcript-empty")?.remove();
+
     const line = document.createElement("div");
     line.className = `jarvis-line ${role}`;
     const label = document.createElement("span");
@@ -846,7 +917,7 @@ function stopJarvisSession() {
     stopJarvisAudio();
     if (jarvisMic) { jarvisMic.disabled = false; jarvisMic.classList.remove("recording"); }
     if (jarvisStop) jarvisStop.disabled = true;
-    if (jarvisCaption) jarvisCaption.textContent = "TAP THE ORB TO START TALKING";
+    if (jarvisCaption) jarvisCaption.textContent = "TAP THE MICROPHONE TO START · OR TYPE BELOW";
     jarvisState("SYSTEM STANDBY", "Your voice session has ended.");
 }
 
@@ -884,54 +955,43 @@ async function startJarvisRecording() {
     }
 }
 
-
 function cleanTextForSpeech(markdown) {
     if (!markdown) return "";
     let text = String(markdown);
 
-    // Keep every explanatory sentence. Announce code blocks without reading
-    // punctuation-heavy source code aloud; the complete code remains on screen.
     text = text.replace(/```[\s\S]*?```/g, "\nI've included a code example in the chat.\n");
     text = text.replace(/~~~[\s\S]*?~~~/g, "\nI've included a code example in the chat.\n");
 
-    // Preserve the readable text of links and image descriptions.
     text = text.replace(/!\[([^\]]*)\]\([^)]+\)/g, "$1");
     text = text.replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, "$1");
     text = text.replace(/<https?:\/\/[^>]+>/g, " ");
     text = text.replace(/https?:\/\/\S+/gi, " ");
 
-    // Inline code keeps its words; only the backticks are removed.
     text = text.replace(/`([^`]+)`/g, "$1");
 
-    // Turn Markdown headings into spoken heading cues while retaining the words.
     text = text.replace(/^\s{0,3}#{1,6}\s*(.+?)\s*#*\s*$/gm, "\n$1.\n");
     text = text.replace(/^\s*>\s?/gm, "");
     text = text.replace(/^\s*(?:[-*_]\s*){3,}$/gm, "\n");
 
-    // Keep list content and make numbered items audible as natural sequence cues.
     text = text.replace(/^\s*(\d+)[.)]\s+/gm, "Item $1: ");
     text = text.replace(/^\s*[-*+]\s+\[[ xX]\]\s+/gm, "");
     text = text.replace(/^\s*[-*+]\s+/gm, "");
 
-    // Remove formatting markers, not the words they surround.
     text = text.replace(/\*\*(.*?)\*\*/gs, "$1");
     text = text.replace(/__(.*?)__/gs, "$1");
     text = text.replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g, "$1");
     text = text.replace(/(?<!_)_([^_\n]+)_(?!_)/g, "$1");
     text = text.replace(/~~(.*?)~~/gs, "$1");
 
-    // Tables: speak every cell in reading order, without pipes/separator rows.
     text = text.replace(/^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?\s*$/gm, "");
     text = text.replace(/^\s*\|/gm, "").replace(/\|\s*$/gm, "");
     text = text.replace(/\s*\|\s*/g, ", ");
 
-    // Strip HTML tags and decode common entities.
     text = text.replace(/<[^>]*>/g, " ");
     text = text.replace(/&nbsp;/gi, " ").replace(/&amp;/gi, " and ")
         .replace(/&lt;/gi, " less than ").replace(/&gt;/gi, " greater than ")
         .replace(/&quot;/gi, '"').replace(/&#39;/gi, "'");
 
-    // A hashtag is spoken as its word, never as the word "hash".
     text = text.replace(/(^|\s)#(?=[\p{L}\p{N}_])/gu, "$1");
     text = text.replace(/[ \t]+/g, " ");
     text = text.replace(/[ \t*#_`]+\n/g, "\n");
@@ -944,8 +1004,7 @@ async function speakJarvisReply(markdown, turnId = jarvisTurnId) {
     const cleaned = cleanTextForSpeech(markdown);
     if (!cleaned) return;
 
-    // Orpheus accepts at most 200 characters per request. Split at sentence,
-    // paragraph, and word boundaries without dropping any spoken words.
+    // Orpheus accepts at most 200 characters per request.
     const paragraphs = cleaned.split(/\n{1,}/).map(part => part.trim()).filter(Boolean);
     const chunks = [];
     for (const paragraph of paragraphs) {
@@ -987,7 +1046,6 @@ async function speakJarvisReply(markdown, turnId = jarvisTurnId) {
             jarvisAudio.play().catch(reject);
         });
         stopJarvisAudio();
-        // A short natural pause between chunks makes long answers less rushed.
         if (index < chunks.length - 1) {
             await new Promise(resolve => setTimeout(resolve, 180));
         }
@@ -1002,8 +1060,6 @@ async function sendJarvisMessage(message, source = "typed") {
         return;
     }
 
-    // A new typed or spoken turn interrupts any current audio response and
-    // uses the same conversation ID, so the conversation never resets.
     const turnId = ++jarvisTurnId;
     stopJarvisAudio();
     if (jarvisRecording && jarvisRecorder?.state === "recording") {
@@ -1038,7 +1094,7 @@ async function sendJarvisMessage(message, source = "typed") {
         else jarvisState("STANDING BY", "Your answer is ready. Type another message or start the microphone.");
     } catch (error) {
         if (turnId !== jarvisTurnId) return;
-        console.error("JARVIS message error:", error);
+        console.error("Voice message error:", error);
         jarvisState("VOICE SYSTEM NOTICE", error.message || "Something went wrong.");
         if (jarvisCaption) jarvisCaption.textContent = "YOU CAN TRY AGAIN OR TYPE A MESSAGE";
         showToast(error.message || "Rex couldn't complete that request.");
@@ -1071,7 +1127,7 @@ async function processJarvisRecording(blob) {
         jarvisTurnBusy = false;
         await sendJarvisMessage(spokenText, "voice");
     } catch (error) {
-        console.error("JARVIS transcription error:", error);
+        console.error("Transcription error:", error);
         jarvisTurnBusy = false;
         jarvisState("VOICE SYSTEM NOTICE", error.message || "Speech recognition failed.");
         if (jarvisCaption) jarvisCaption.textContent = "TAP THE MICROPHONE TO TRY AGAIN, OR TYPE BELOW";
@@ -1129,10 +1185,22 @@ jarvisMic?.addEventListener("click", async () => {
 });
 jarvisStop?.addEventListener("click", stopJarvisSession);
 
+// ==========================================
+// KEYBOARD SHORTCUTS
+// ==========================================
+//   ⌘/Ctrl + K  new chat      /  focus the message box      Esc  close sidebar / voice mode
+
+function isTypingTarget(el) {
+    return el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable);
+}
+
 document.addEventListener("keydown", event => {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
         resetChat();
+    } else if (event.key === "/" && !isTypingTarget(document.activeElement) && !jarvisScreen?.classList.contains("is-open")) {
+        event.preventDefault();
+        messageInput.focus();
     } else if (event.key === "Escape") {
         if (jarvisScreen?.classList.contains("is-open")) {
             closeJarvisMode();
@@ -1150,6 +1218,12 @@ window.addEventListener("online", () => showToast("Back online."));
 // ==========================================
 
 renderHistory();
+autoResize();
 initialize();
+
+// focus the box on desktop only (focusing on phones pops the keyboard open)
+if (window.matchMedia("(hover: hover) and (pointer: fine)").matches) {
+    messageInput.focus({ preventScroll: true });
+}
 
 });
