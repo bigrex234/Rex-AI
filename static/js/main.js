@@ -37,6 +37,9 @@ const MAX_HISTORY_SENT = 20;
 const MAX_INPUT_LENGTH = 4000;
 const REQUEST_TIMEOUT_MS = 60000;
 
+const REDUCED = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+const FINE_POINTER = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+
 const sendIdleHTML = sendBtn.innerHTML;
 const hintDefault = inputHint ? inputHint.textContent : "";
 
@@ -51,7 +54,264 @@ messageInput.maxLength = MAX_INPUT_LENGTH;
 sendBtn.setAttribute("aria-label", "Send message");
 
 // ==========================================
-// THEME (dark / light toggle, injected into the top bar)
+// FX ENGINE  (particles, glow, tilt, ripple, burst, scramble, typewriter)
+// ==========================================
+
+const NEON = ["#22d3ee", "#8b5cf6", "#ec4899", "#fbbf24", "#4ade80"];
+
+// ---- background particle constellation (reacts to the mouse) ----
+function initParticles() {
+    if (REDUCED) return;
+    const host = document.querySelector(".main-content");
+    if (!host) return;
+
+    const cv = document.createElement("canvas");
+    cv.className = "fx-canvas";
+    host.prepend(cv);
+    const ctx = cv.getContext("2d");
+    const mouse = { x: -9999, y: -9999 };
+    let w = 0, h = 0, pts = [], raf = 0;
+
+    function resize() {
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        w = host.clientWidth; h = host.clientHeight;
+        cv.width = w * dpr; cv.height = h * dpr;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        const n = Math.min(75, Math.floor((w * h) / 17000));
+        pts = Array.from({ length: n }, () => ({
+            x: Math.random() * w, y: Math.random() * h,
+            vx: (Math.random() - 0.5) * 0.3, vy: (Math.random() - 0.5) * 0.3,
+            r: Math.random() * 1.6 + 0.6
+        }));
+    }
+
+    new ResizeObserver(resize).observe(host);
+    host.addEventListener("pointermove", e => {
+        const r = host.getBoundingClientRect();
+        mouse.x = e.clientX - r.left; mouse.y = e.clientY - r.top;
+    }, { passive: true });
+    host.addEventListener("pointerleave", () => { mouse.x = mouse.y = -9999; });
+
+    function frame() {
+        const light = document.documentElement.dataset.theme === "light";
+        const c1 = light ? "8,145,178" : "34,211,238";
+        const c2 = light ? "124,58,237" : "168,85,247";
+        ctx.clearRect(0, 0, w, h);
+
+        for (const p of pts) {
+            p.x += p.vx; p.y += p.vy;
+            if (p.x < 0 || p.x > w) p.vx *= -1;
+            if (p.y < 0 || p.y > h) p.vy *= -1;
+
+            const dx = p.x - mouse.x, dy = p.y - mouse.y, d = Math.hypot(dx, dy);
+            if (d < 130 && d > 0) { p.x += (dx / d) * 1.4; p.y += (dy / d) * 1.4; }  // dodge the cursor
+
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.r, 0, 6.2832);
+            ctx.fillStyle = `rgba(${c1},${light ? 0.55 : 0.8})`;
+            ctx.fill();
+        }
+
+        for (let i = 0; i < pts.length; i++) {
+            for (let j = i + 1; j < pts.length; j++) {
+                const a = pts[i], b = pts[j], d = Math.hypot(a.x - b.x, a.y - b.y);
+                if (d < 115) {
+                    ctx.strokeStyle = `rgba(${c2},${(1 - d / 115) * (light ? 0.22 : 0.3)})`;
+                    ctx.lineWidth = 0.8;
+                    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+                }
+            }
+            const m = Math.hypot(pts[i].x - mouse.x, pts[i].y - mouse.y);
+            if (m < 170) {
+                ctx.strokeStyle = `rgba(${c1},${(1 - m / 170) * 0.55})`;
+                ctx.lineWidth = 1;
+                ctx.beginPath(); ctx.moveTo(pts[i].x, pts[i].y); ctx.lineTo(mouse.x, mouse.y); ctx.stroke();
+            }
+        }
+        raf = requestAnimationFrame(frame);
+    }
+
+    document.addEventListener("visibilitychange", () => {
+        cancelAnimationFrame(raf);
+        if (!document.hidden) frame();
+    });
+    resize();
+    frame();
+}
+
+// ---- soft glow that trails the cursor ----
+function initCursorGlow() {
+    if (REDUCED || !FINE_POINTER) return;
+    const glow = document.createElement("div");
+    glow.className = "cursor-glow";
+    document.body.appendChild(glow);
+
+    let tx = innerWidth / 2, ty = innerHeight / 2, x = tx, y = ty;
+    window.addEventListener("pointermove", e => { tx = e.clientX; ty = e.clientY; glow.classList.add("on"); }, { passive: true });
+    document.addEventListener("pointerleave", () => glow.classList.remove("on"));
+
+    (function loop() {
+        x += (tx - x) * 0.12; y += (ty - y) * 0.12;
+        glow.style.transform = `translate(${x}px, ${y}px)`;
+        requestAnimationFrame(loop);
+    })();
+}
+
+// ---- 3D tilt + moving light on cards ----
+function attachTilt(el, max = 9) {
+    if (REDUCED || !FINE_POINTER) return;
+    el.addEventListener("pointermove", e => {
+        const r = el.getBoundingClientRect();
+        const x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
+        el.style.setProperty("--ry", ((x - 0.5) * max * 2).toFixed(2) + "deg");
+        el.style.setProperty("--rx", ((0.5 - y) * max * 2).toFixed(2) + "deg");
+        el.style.setProperty("--mx", (x * 100).toFixed(1) + "%");
+        el.style.setProperty("--my", (y * 100).toFixed(1) + "%");
+    });
+    el.addEventListener("pointerleave", () => {
+        el.style.setProperty("--rx", "0deg");
+        el.style.setProperty("--ry", "0deg");
+    });
+}
+
+// ---- magnetic buttons (use the independent `translate` property) ----
+function attachMagnet(el, strength = 0.3) {
+    if (!el || REDUCED || !FINE_POINTER) return;
+    el.addEventListener("pointermove", e => {
+        const r = el.getBoundingClientRect();
+        const dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2);
+        el.style.translate = `${dx * strength}px ${dy * strength}px`;
+    });
+    el.addEventListener("pointerleave", () => { el.style.translate = "0 0"; });
+}
+
+// ---- click ripple ----
+document.addEventListener("pointerdown", e => {
+    if (REDUCED) return;
+    const target = e.target.closest(".new-chat-btn, .send-btn, .voice-btn, .top-action, .suggestion-card, .sidebar-link, .jarvis-mic");
+    if (!target) return;
+    const r = target.getBoundingClientRect();
+    const size = Math.max(r.width, r.height) * 2;
+    const dot = document.createElement("span");
+    dot.className = "ripple";
+    dot.style.cssText = `width:${size}px;height:${size}px;left:${e.clientX - r.left - size / 2}px;top:${e.clientY - r.top - size / 2}px;`;
+    target.appendChild(dot);
+    dot.addEventListener("animationend", () => dot.remove());
+});
+
+// ---- particle burst (send, copy, theme toggle) ----
+function burst(x, y, count = 16) {
+    if (REDUCED) return;
+    for (let i = 0; i < count; i++) {
+        const p = document.createElement("i");
+        const color = NEON[i % NEON.length];
+        p.className = "spark";
+        p.style.cssText = `left:${x}px;top:${y}px;background:${color};color:${color};`;
+        document.body.appendChild(p);
+
+        const angle = Math.random() * Math.PI * 2;
+        const dist = 40 + Math.random() * 70;
+        p.animate([
+            { transform: "translate(-50%,-50%) scale(1)", opacity: 1 },
+            { transform: `translate(calc(-50% + ${Math.cos(angle) * dist}px), calc(-50% + ${Math.sin(angle) * dist}px)) scale(0)`, opacity: 0 }
+        ], { duration: 550 + Math.random() * 450, easing: "cubic-bezier(.15,.8,.25,1)" }).onfinish = () => p.remove();
+    }
+}
+
+function burstFrom(el, count) {
+    const r = el.getBoundingClientRect();
+    burst(r.left + r.width / 2, r.top + r.height / 2, count);
+}
+
+// ---- text scramble (hero headline) ----
+let scrambleTimer = null;
+function scramble(el, finalText, duration = 1000) {
+    if (!el) return;
+    clearInterval(scrambleTimer);
+    if (REDUCED) { el.textContent = finalText; return; }
+
+    const glyphs = "!<>-_\\/[]{}—=+*^?#01";
+    const total = Math.round(duration / 32);
+    let frame = 0;
+
+    scrambleTimer = setInterval(() => {
+        const progress = frame / total;
+        el.textContent = [...finalText].map((ch, i) => {
+            if (ch === " ") return " ";
+            return i / finalText.length < progress ? ch : glyphs[Math.floor(Math.random() * glyphs.length)];
+        }).join("");
+        if (++frame > total) { clearInterval(scrambleTimer); el.textContent = finalText; }
+    }, 32);
+}
+
+const heroName = document.querySelector(".welcome-screen h1 span");
+const heroText = heroName ? heroName.textContent : "";
+
+// ---- typewriter that reveals an already-rendered markdown element ----
+let activeTyper = null;
+
+function typewrite(root, onTick) {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+        acceptNode(node) {
+            if (!node.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+            if (node.parentElement && node.parentElement.closest("button, .code-lang")) return NodeFilter.FILTER_REJECT;
+            return NodeFilter.FILTER_ACCEPT;
+        }
+    });
+
+    const nodes = [];
+    let total = 0;
+    while (walker.nextNode()) {
+        const n = walker.currentNode;
+        nodes.push({ n, t: n.nodeValue });
+        total += n.nodeValue.length;
+        n.nodeValue = "";
+    }
+    if (!total) return { finish() {} };
+
+    const caret = document.createElement("span");
+    caret.className = "type-caret";
+    const perFrame = Math.max(2, Math.ceil(total / 220));   // long replies finish in ~4s
+    let shown = 0, raf = 0, finished = false;
+
+    function paint() {
+        let left = shown, last = nodes[0];
+        for (const item of nodes) {
+            if (left <= 0) { item.n.nodeValue = ""; continue; }
+            const take = Math.min(left, item.t.length);
+            item.n.nodeValue = item.t.slice(0, take);
+            left -= take;
+            last = item;
+        }
+        last.n.after(caret);
+    }
+
+    function step() {
+        shown = Math.min(total, shown + perFrame);
+        paint();
+        onTick?.();
+        if (shown >= total) finish(); else raf = requestAnimationFrame(step);
+    }
+
+    function finish() {
+        if (finished) return;
+        finished = true;
+        cancelAnimationFrame(raf);
+        nodes.forEach(item => { item.n.nodeValue = item.t; });
+        caret.remove();
+        if (activeTyper && activeTyper.finish === finish) activeTyper = null;
+    }
+
+    raf = requestAnimationFrame(step);
+    return { finish };
+}
+
+function finishTyping() {
+    if (activeTyper) activeTyper.finish();
+}
+
+// ==========================================
+// THEME (dark / light toggle with circular reveal)
 // ==========================================
 
 function getSavedTheme() {
@@ -62,12 +322,10 @@ function getSavedTheme() {
 function applyTheme(theme) {
     document.documentElement.dataset.theme = theme;
     document.querySelector('meta[name="theme-color"]')
-        ?.setAttribute("content", theme === "light" ? "#f3f6fb" : "#060a12");
-    if (themeBtn) {
-        themeBtn.textContent = theme === "light" ? "☾" : "☀";
-        themeBtn.title = theme === "light" ? "Switch to dark theme" : "Switch to light theme";
-        themeBtn.setAttribute("aria-label", themeBtn.title);
-    }
+        ?.setAttribute("content", theme === "light" ? "#f2f4fb" : "#05060d");
+    themeBtn.textContent = theme === "light" ? "☾" : "☀";
+    themeBtn.title = theme === "light" ? "Switch to dark theme" : "Switch to light theme";
+    themeBtn.setAttribute("aria-label", themeBtn.title);
 }
 
 const themeBtn = document.createElement("button");
@@ -84,8 +342,23 @@ if (topbar && clearChatBtn) {
 
 themeBtn.addEventListener("click", () => {
     const next = document.documentElement.dataset.theme === "light" ? "dark" : "light";
-    applyTheme(next);
     try { localStorage.setItem(THEME_KEY, next); } catch {}
+
+    if (document.startViewTransition && !REDUCED) {
+        const r = themeBtn.getBoundingClientRect();
+        const x = r.left + r.width / 2, y = r.top + r.height / 2;
+        const radius = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
+        const transition = document.startViewTransition(() => applyTheme(next));
+        transition.ready.then(() => {
+            document.documentElement.animate(
+                { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${radius}px at ${x}px ${y}px)`] },
+                { duration: 650, easing: "cubic-bezier(.4,0,.2,1)", pseudoElement: "::view-transition-new(root)" }
+            );
+        }).catch(() => {});
+    } else {
+        applyTheme(next);
+    }
+    burstFrom(themeBtn, 10);
 });
 
 applyTheme(getSavedTheme());
@@ -202,7 +475,6 @@ function renderMarkdown(element, content) {
         const code = pre.querySelector("code");
         if (code && window.hljs) hljs.highlightElement(code);
 
-        // language label (top-left of the code block)
         const lang = (code?.className.match(/language-([\w+#-]+)/) || [])[1];
         if (lang) {
             const label = document.createElement("span");
@@ -218,6 +490,7 @@ function renderMarkdown(element, content) {
         btn.addEventListener("click", async () => {
             const ok = await copyText((code || pre).textContent);
             btn.textContent = ok ? "Copied ✓" : "Failed";
+            if (ok) burstFrom(btn, 10);
             setTimeout(() => (btn.textContent = "Copy"), 1600);
         });
         pre.appendChild(btn);
@@ -284,7 +557,7 @@ closeSidebar?.addEventListener("click", hideSidebar);
 overlay.addEventListener("click", hideSidebar);
 
 // ==========================================
-// INPUT (auto-resize, ready state, character counter)
+// INPUT
 // ==========================================
 
 function autoResize() {
@@ -317,7 +590,7 @@ function addMessage(role, content, { animate = true, isError = false, reveal = f
 
     if (animate) {
         message.style.opacity = "0";
-        message.style.transform = "translateY(16px)";
+        message.style.transform = role === "user" ? "translateX(30px) scale(0.92)" : "translateY(18px)";
     }
 
     if (role === "assistant") {
@@ -341,12 +614,12 @@ function addMessage(role, content, { animate = true, isError = false, reveal = f
     const text = document.createElement("div");
     text.className = "message-text";
 
+    let typer = null;
     if (role === "assistant" && !isError) {
         renderMarkdown(text, content);
-        if (reveal) {
-            // each block (paragraph, list, code...) fades in one after another
-            text.classList.add("reveal");
-            [...text.children].forEach((el, i) => el.style.setProperty("--i", Math.min(i, 14)));
+        if (reveal && !REDUCED) {
+            typer = typewrite(text, () => scrollToBottom(false, false));
+            activeTyper = typer;
         }
     } else {
         text.textContent = content;
@@ -366,6 +639,7 @@ function addMessage(role, content, { animate = true, isError = false, reveal = f
             showToast(ok ? "Response copied!" : "Could not copy response.");
             if (ok) {
                 copyBtn.textContent = "Copied ✓";
+                burstFrom(copyBtn, 12);
                 setTimeout(() => (copyBtn.textContent = "Copy"), 1600);
             }
         });
@@ -380,16 +654,15 @@ function addMessage(role, content, { animate = true, isError = false, reveal = f
     if (animate) {
         requestAnimationFrame(() => {
             message.style.transition =
-                "opacity 0.45s cubic-bezier(0.22, 1, 0.36, 1), transform 0.45s cubic-bezier(0.22, 1, 0.36, 1)";
+                "opacity 0.5s cubic-bezier(0.22, 1, 0.36, 1), transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)";
             message.style.opacity = "1";
-            message.style.transform = "translateY(0)";
+            message.style.transform = "none";
         });
     }
 
     return message;
 }
 
-// Only the latest good assistant reply gets a Regenerate button.
 function refreshRegenerateButton() {
     messagesContainer.querySelectorAll(".regen-btn").forEach(btn => btn.remove());
     if (isLoading) return;
@@ -457,6 +730,7 @@ function showChatView() {
 }
 
 function showWelcomeView() {
+    finishTyping();
     messagesContainer.replaceChildren();
     messagesContainer.style.display = "none";
     scrollDownBtn.classList.remove("show");
@@ -465,6 +739,7 @@ function showWelcomeView() {
     welcomeScreen.style.animation = "none";
     void welcomeScreen.offsetWidth;
     welcomeScreen.style.animation = "";
+    scramble(heroName, heroText, 900);
 }
 
 // ==========================================
@@ -506,14 +781,14 @@ function renderHistory() {
 
         row.append(item, del);
         row.style.opacity = "0";
-        row.style.transform = "translateX(-8px)";
+        row.style.transform = "translateX(-16px)";
         historyEl.appendChild(row);
 
         setTimeout(() => {
-            row.style.transition = "opacity 0.3s ease, transform 0.3s ease";
+            row.style.transition = "opacity 0.4s ease, transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)";
             row.style.opacity = "1";
-            row.style.transform = "translateX(0)";
-        }, i * 25);
+            row.style.transform = "";
+        }, i * 40);
     });
 }
 
@@ -526,6 +801,7 @@ function openChat(id) {
     const chat = chats.find(c => c.id === id);
     if (!chat) return;
 
+    finishTyping();
     activeChatId = id;
     messagesContainer.replaceChildren();
     showChatView();
@@ -588,7 +864,6 @@ async function requestReply(message, history, signal, retried = false) {
         // server returned something that isn't JSON (e.g. an HTML error page)
     }
 
-    // token expired? get a fresh one and try once more
     if ((response.status === 400 || response.status === 403) && !retried) {
         await fetchCsrfToken();
         return requestReply(message, history, signal, true);
@@ -649,6 +924,9 @@ async function sendMessage(customMessage = null) {
         }
     }
 
+    finishTyping();
+    burstFrom(sendBtn, 14);
+
     showChatView();
     addMessage("user", message);
 
@@ -673,7 +951,6 @@ async function sendMessage(customMessage = null) {
 
         addMessage("assistant", reply, { reveal: true });
 
-        // create the chat only once we have a successful reply
         let chat = getActiveChat();
         if (!chat) {
             chat = { id: Date.now(), title: message.slice(0, 40), updated: Date.now(), messages: [] };
@@ -723,6 +1000,7 @@ function regenerate() {
     const lastUser = chat.messages[chat.messages.length - 2];
     if (!lastUser || lastUser.role !== "user") return;
 
+    finishTyping();
     chat.messages.splice(-2);
     saveChats();
 
@@ -751,6 +1029,7 @@ messageInput.addEventListener("keydown", event => {
 });
 
 document.querySelectorAll(".suggestion-card").forEach(card => {
+    attachTilt(card);
     card.addEventListener("click", () => {
         const prompt = card.dataset.prompt;
         if (prompt) sendMessage(prompt);
@@ -759,6 +1038,17 @@ document.querySelectorAll(".suggestion-card").forEach(card => {
 
 newChatBtn?.addEventListener("click", resetChat);
 clearChatBtn?.addEventListener("click", resetChat);
+
+[sendBtn, voiceBtn, themeBtn, clearChatBtn].forEach(btn => attachMagnet(btn, 0.28));
+
+// hero orb follows the mouse a little
+if (!REDUCED && FINE_POINTER) {
+    const orb = document.querySelector(".hero-orb");
+    window.addEventListener("pointermove", e => {
+        orb?.style.setProperty("--px", ((e.clientX / innerWidth - 0.5) * 2).toFixed(3));
+        orb?.style.setProperty("--py", ((e.clientY / innerHeight - 0.5) * 2).toFixed(3));
+    }, { passive: true });
+}
 
 // ==========================================
 // VOICE PREVIEW (speaker button in the composer)
@@ -850,7 +1140,6 @@ function closeJarvisMode() {
 jarvisShortcut?.addEventListener("click", openJarvisMode);
 jarvisBack?.addEventListener("click", closeJarvisMode);
 
-// record -> transcribe -> chat -> speak -> listen again
 const jarvisMic = $("jarvisMic");
 const jarvisStop = $("jarvisStop");
 const jarvisStatus = $("jarvisStatus");
@@ -873,6 +1162,57 @@ let jarvisAutoListen = false;
 let jarvisDiscardRecording = false;
 let jarvisTurnId = 0;
 
+// ---- audio bars under the orb ----
+(function buildWave() {
+    const stage = document.querySelector(".jarvis-orb-stage");
+    if (!stage) return;
+    const wave = document.createElement("div");
+    wave.className = "jarvis-wave";
+    wave.setAttribute("aria-hidden", "true");
+    for (let i = 0; i < 30; i++) {
+        const bar = document.createElement("i");
+        const bell = Math.sin((i / 29) * Math.PI);                 // taller in the middle
+        bar.style.setProperty("--i", i);
+        bar.style.setProperty("--r", (0.25 + bell * 0.75 * (0.6 + Math.random() * 0.4)).toFixed(2));
+        wave.appendChild(bar);
+    }
+    stage.after(wave);
+})();
+
+// ---- real microphone level drives the orb + bars ----
+let micCtx = null;
+let micRaf = 0;
+
+function watchMic(stream) {
+    stopMicWatch();
+    try {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return;
+        micCtx = new AC();
+        const analyser = micCtx.createAnalyser();
+        analyser.fftSize = 256;
+        micCtx.createMediaStreamSource(stream).connect(analyser);
+        const data = new Uint8Array(analyser.frequencyBinCount);
+
+        (function tick() {
+            analyser.getByteFrequencyData(data);
+            let sum = 0;
+            for (let i = 0; i < data.length; i++) sum += data[i];
+            const level = Math.min(1, sum / data.length / 80);
+            jarvisScreen?.style.setProperty("--level", level.toFixed(3));
+            micRaf = requestAnimationFrame(tick);
+        })();
+    } catch (error) {
+        console.warn("Mic level meter unavailable:", error);
+    }
+}
+
+function stopMicWatch() {
+    cancelAnimationFrame(micRaf);
+    if (micCtx) { micCtx.close().catch(() => {}); micCtx = null; }
+    jarvisScreen?.style.setProperty("--level", "0");
+}
+
 function jarvisState(state, prompt) {
     if (jarvisStatus) jarvisStatus.textContent = state;
     if (jarvisPrompt && prompt) jarvisPrompt.textContent = prompt;
@@ -883,7 +1223,6 @@ function jarvisState(state, prompt) {
 }
 
 function jarvisTranscriptLine(role, content) {
-    // the empty-state placeholder in index.html is a class, not an id
     jarvisTranscript?.querySelector(".jarvis-transcript-empty")?.remove();
 
     const line = document.createElement("div");
@@ -914,6 +1253,7 @@ function stopJarvisSession() {
     jarvisRecorder = null;
     jarvisStream?.getTracks().forEach(track => track.stop());
     jarvisStream = null;
+    stopMicWatch();
     stopJarvisAudio();
     if (jarvisMic) { jarvisMic.disabled = false; jarvisMic.classList.remove("recording"); }
     if (jarvisStop) jarvisStop.disabled = true;
@@ -926,6 +1266,7 @@ async function startJarvisRecording() {
     try {
         const activeStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
         jarvisStream = activeStream;
+        watchMic(activeStream);
         const mime = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"].find(type => window.MediaRecorder && MediaRecorder.isTypeSupported(type));
         const recordingChunks = [];
         jarvisChunks = recordingChunks;
@@ -935,7 +1276,7 @@ async function startJarvisRecording() {
         const activeRecorder = jarvisRecorder;
         activeRecorder.onstop = () => {
             activeStream.getTracks().forEach(track => track.stop());
-            if (jarvisStream === activeStream) jarvisStream = null;
+            if (jarvisStream === activeStream) { jarvisStream = null; stopMicWatch(); }
             const blob = new Blob(recordingChunks, { type: activeRecorder.mimeType || "audio/webm" });
             if (jarvisRecorder === activeRecorder) jarvisRecorder = null;
             jarvisRecording = false;
@@ -1004,7 +1345,6 @@ async function speakJarvisReply(markdown, turnId = jarvisTurnId) {
     const cleaned = cleanTextForSpeech(markdown);
     if (!cleaned) return;
 
-    // Orpheus accepts at most 200 characters per request.
     const paragraphs = cleaned.split(/\n{1,}/).map(part => part.trim()).filter(Boolean);
     const chunks = [];
     for (const paragraph of paragraphs) {
@@ -1187,8 +1527,8 @@ jarvisStop?.addEventListener("click", stopJarvisSession);
 
 // ==========================================
 // KEYBOARD SHORTCUTS
+//   ⌘/Ctrl + K  new chat    /  focus input    Esc  close sidebar / voice mode
 // ==========================================
-//   ⌘/Ctrl + K  new chat      /  focus the message box      Esc  close sidebar / voice mode
 
 function isTypingTarget(el) {
     return el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable);
@@ -1214,16 +1554,27 @@ window.addEventListener("offline", () => showToast("You're offline."));
 window.addEventListener("online", () => showToast("Back online."));
 
 // ==========================================
-// START
+// BOOT SPLASH + START
 // ==========================================
 
+function runBootSplash() {
+    if (REDUCED) return;
+    const boot = document.createElement("div");
+    boot.className = "boot";
+    boot.innerHTML = `<div class="boot-logo">R</div><div class="boot-bar"><i></i></div>`;
+    document.body.appendChild(boot);
+    setTimeout(() => boot.classList.add("hide"), 1050);
+    setTimeout(() => boot.remove(), 1850);
+}
+
+runBootSplash();
+initParticles();
+initCursorGlow();
 renderHistory();
 autoResize();
 initialize();
+setTimeout(() => scramble(heroName, heroText, 1100), REDUCED ? 0 : 900);
 
-// focus the box on desktop only (focusing on phones pops the keyboard open)
-if (window.matchMedia("(hover: hover) and (pointer: fine)").matches) {
-    messageInput.focus({ preventScroll: true });
-}
+if (FINE_POINTER) messageInput.focus({ preventScroll: true });
 
 });
