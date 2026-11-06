@@ -137,6 +137,14 @@ Skills and tech:
 - Currently growing in Pygame, machine learning (scikit-learn, Pandas, NumPy), backend engineering and cybersecurity.
 - Future interests: C++, C#, robotics, data science, software architecture, automation, space technology.
 
+Friend and Relations
+- Rex has a lot of friends 
+- He has a  friend named Zobobozo name is Macjob Korede he is super hero in FUNAAB and he is also a computer science student
+- He also has a friend name BigTen his real name is Teni and he is a Mechatronic Engineering student
+- Rex also has a girlfriend he loves so much he name is Kiekie and her real name is Dahunsi Okikioluwa Anuoluwapo and she is also in software Engineering and 200level same as Rex. Rex really loves her so much 
+- Rex has two sisters and a mother . His Mum's name is Afolakemi Sobukonla Nancy . Rex's younger sister is studying Law in Olabisi Onabanjo University her name is Balogun Anjolaoluwa Mazeedat . Rex's Elder sister name is Balogun Oluwakemi Rihanat.
+- Rex really loves Kiekie with all his heart.
+
 Creative work:
 - Cinematic anime AMVs, velocity/action/hype edits, typography, motion graphics, promo and music videos.
 - Main tool: Adobe After Effects. Also explored: Sapphire, Boris FX Continuum, Magic Bullet Looks, Element 3D, Twixtor, Topaz Video AI.
